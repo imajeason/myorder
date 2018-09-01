@@ -7,8 +7,12 @@ SQLALCHEMY_DATABASE_URI = 'mysql://myorder:123456@localhost/mysql'
 SQLALCHEMY_TRACK_MODIFICATIONS  =  False
 SQLALCHEMY_ENCODING = "UTF-8"
 
-PAGE_SIZE = 20
+PAGE_SIZE = 50 
 PAGE_DISPLAY= 10
+STATUS_MAPPING = {
+    "1":"正常",
+    "2":"已删除"
+}
 
 AUTH_COOKIE_NAME = 'my_order'
 

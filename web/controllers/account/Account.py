@@ -5,6 +5,7 @@ from common.libs.UrlManager import UrlManager
 from common.libs.user.UserService import UserService
 from common.models.User import User
 from application import app, db
+from sqlalchemy import or_
 
 route_account = Blueprint( 'account_page',__name__ )
 
@@ -13,16 +14,21 @@ def index():
     resp_data = {}
 
     req = request.values
-    page = int( req['page'])  if ( 'page' in req and req['page'] ) else 1
+    page = int( req['p'])  if ( 'p' in req and req['p'] ) else 1
 
     query = User.query
+    if 'mix_kw' in req:
+        rule = or_(User.nickname.ilike("%{0}%".format(req['mix_kw'])),User.mobile.ilike("%{0}%".format(req['mix_kw'])) )
+        query = query.filter(rule)
 
+    if 'status' in req and int(req['status']) > -1:
+        query = query.filter(User.status == int(req['status']))
     page_params = {
         'total': query.count(),
         'page_size': app.config['PAGE_SIZE'],
         'page': page,
         'display': app.config['PAGE_DISPLAY'],
-        'url': 'account/index'
+        'url':request.full_path.replace("&p={}".format(page), "") 
     }
     pages = iPagination(page_params)
     offset = ( page -1 ) * app.config['PAGE_SIZE']
@@ -31,6 +37,8 @@ def index():
     list = query.order_by(User.uid.desc() ).all()[offset:limit]
     resp_data["list"] = list
     resp_data["pages"] = pages 
+    resp_data['search_con'] = req
+    resp_data['status_mapping'] = app.config['STATUS_MAPPING']
     return ops_render("account/index.html" ,resp_data)
 
 @route_account.route( "/info" )
@@ -55,11 +63,12 @@ def set():
     if request.method == "GET":
         resp_data = {}
         req = request.args
-        uid = int(req.get("uid",0))
+        uid = int(req.get("id",0))
         info = None
         if uid:
             info = User.query.filter_by(uid=uid).first()
         resp_data['info'] = info
+        app.logger.info(resp_data)
 
         return ops_render("account/set.html", resp_data)
     resp = { 'code':200,'msg':'操作成功','data':{} }
@@ -124,3 +133,37 @@ def set():
     return jsonify(resp)
 
 
+
+@route_account.route( "/ops" ,methods=["GET","POST"])
+def ops():
+    resp = { 'code':200,'msg':'操作成功','data':{} }
+    req = request.values
+
+    id = req['id'] if 'id' in req else 0
+    act = req['act'] if 'act' in req else ''
+
+    if not id :
+        resp['code'] = -1
+        resp['msg'] = '请选择要操作的账号' 
+        return jsonify(resp)
+
+    if act not in ['remove','recover']:
+        resp['code'] = -1
+        resp['msg'] = '操作错误' 
+        return jsonify(resp)
+
+    user_info = User.query.filter_by(uid=id).first()
+    if not user_info:
+        resp['code'] = -1
+        resp['msg'] = '账号不存在'
+
+    if act == 'remove':
+        user_info.status = 0
+
+    elif act == 'recover':
+        user_info.status = 1
+    user_info.update_time = getCurrentDate()
+    db.session.add(user_info)
+    db.session.commit()
+
+    return jsonify(resp)
